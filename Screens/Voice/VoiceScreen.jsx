@@ -164,7 +164,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   // IMPORTANT: Don't hardcode API keys in production. Use secure storage / env vars.
   // Replace the placeholder below with your method of supplying the API key.
-  const [apiKey] = useState('AIzaSyDlZGmg2dwBHIt5ZaEfb4FD30uaCPvWyB8');
+  const [apiKey] = useState('API_KEY');
 
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [spokenWords, setSpokenWords] = useState([]);
@@ -518,3 +518,4 @@ const styles = StyleSheet.create({
     bottom: 0, left: 0, right: 0
   },
 });
+
