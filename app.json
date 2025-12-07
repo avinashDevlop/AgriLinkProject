@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Agri Link",
-    "slug": "agri",
+    "slug": "agrilink",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/iconAndSplash.png",
@@ -15,7 +15,7 @@
     "androidStatusBar": {
       "barStyle": "light-content",
       "backgroundColor": "#4CAF50"
-    },  
+    },
     "ios": {
       "supportsTablet": true
     },
@@ -23,10 +23,17 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/iconAndSplash.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.expo1432sorganization.agrilink"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "owner": "expo1432s-organization",
+    "extra": {
+      "eas": {
+        "projectId": "4746c820-5687-495d-bfc0-22602f443dd3"
+      }
     }
   }
 }

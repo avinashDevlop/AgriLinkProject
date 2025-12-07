@@ -1,87 +1,137 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, Animated } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  Dimensions, 
+  Animated, 
+  RefreshControl,
+  Alert,
+  ActivityIndicator 
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons, Feather, FontAwesome } from '@expo/vector-icons';
+import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
-// Helper function to get dynamic background gradient based on weather condition
-const getGradientColors = (condition) => {
+// Your OpenWeather API key
+const API_KEY = '464d84f2a169bd78555b577306f601bc';
+const BASE_URL = 'https://api.openweathermap.org/data/2.5';
+
+// Helper function to get dynamic background gradient
+const getGradientColors = (condition, isDay) => {
+  if (!condition) return ['#1A2980', '#26D0CE'];
+  
   const lowerCondition = condition.toLowerCase();
   
-  if (lowerCondition.includes('sunny') || lowerCondition.includes('clear')) {
-    return ['#56CCF2', '#2F80ED'];
-  } else if (lowerCondition.includes('cloud')) {
-    return ['#757F9A', '#D7DDE8'];
-  } else if (lowerCondition.includes('rain')) {
-    return ['#0F2027', '#203A43', '#2C5364'];
-  } else if (lowerCondition.includes('snow')) {
-    return ['#E6DADA', '#274046'];
+  if (isDay) {
+    if (lowerCondition.includes('clear')) {
+      return ['#56CCF2', '#2F80ED'];
+    } else if (lowerCondition.includes('cloud')) {
+      return ['#757F9A', '#D7DDE8'];
+    } else if (lowerCondition.includes('rain') || lowerCondition.includes('drizzle')) {
+      return ['#0F2027', '#203A43', '#2C5364'];
+    } else if (lowerCondition.includes('thunder')) {
+      return ['#232526', '#414345'];
+    } else if (lowerCondition.includes('snow')) {
+      return ['#E6DADA', '#274046'];
+    } else {
+      return ['#1A2980', '#26D0CE'];
+    }
   } else {
-    return ['#1A2980', '#26D0CE'];
+    if (lowerCondition.includes('clear')) {
+      return ['#0F2027', '#203A43', '#2C5364'];
+    } else if (lowerCondition.includes('cloud')) {
+      return ['#2C3E50', '#4CA1AF'];
+    } else {
+      return ['#0F2027', '#203A43'];
+    }
   }
 };
 
-// Helper function to get weather icon based on condition
-const getWeatherIcon = (condition) => {
-  const lowerCondition = condition.toLowerCase();
+// Helper function to get weather icon
+const getWeatherIcon = (condition, isDay = true) => {
+  if (!condition) return { name: 'weather-partly-cloudy', lib: MaterialCommunityIcons, color: '#DDDDDD' };
   
-  if (lowerCondition.includes('sunny') || lowerCondition.includes('clear')) {
-    return { name: 'weather-sunny', lib: MaterialCommunityIcons, color: '#FFD700' };
+  const lowerCondition = condition.toLowerCase();
+  const iconColor = isDay ? '#FFD700' : '#6495ED';
+  
+  if (lowerCondition.includes('clear')) {
+    return { 
+      name: isDay ? 'weather-sunny' : 'weather-night', 
+      lib: MaterialCommunityIcons, 
+      color: iconColor 
+    };
   } else if (lowerCondition.includes('cloud')) {
-    return { name: 'weather-cloudy', lib: MaterialCommunityIcons, color: '#DDDDDD' };
-  } else if (lowerCondition.includes('rain')) {
-    return { name: 'weather-rainy', lib: MaterialCommunityIcons, color: '#6495ED' };
+    return { 
+      name: 'weather-cloudy', 
+      lib: MaterialCommunityIcons, 
+      color: '#DDDDDD' 
+    };
+  } else if (lowerCondition.includes('rain') || lowerCondition.includes('drizzle')) {
+    return { 
+      name: 'weather-rainy', 
+      lib: MaterialCommunityIcons, 
+      color: '#6495ED' 
+    };
   } else if (lowerCondition.includes('thunder')) {
-    return { name: 'weather-lightning', lib: MaterialCommunityIcons, color: '#FFA500' };
+    return { 
+      name: 'weather-lightning', 
+      lib: MaterialCommunityIcons, 
+      color: '#FFA500' 
+    };
   } else if (lowerCondition.includes('snow')) {
-    return { name: 'weather-snowy', lib: MaterialCommunityIcons, color: '#FFFFFF' };
+    return { 
+      name: 'weather-snowy', 
+      lib: MaterialCommunityIcons, 
+      color: '#FFFFFF' 
+    };
+  } else if (lowerCondition.includes('mist') || lowerCondition.includes('fog')) {
+    return { 
+      name: 'weather-fog', 
+      lib: MaterialCommunityIcons, 
+      color: '#AAAAAA' 
+    };
   } else {
-    return { name: 'weather-partly-cloudy', lib: MaterialCommunityIcons, color: '#DDDDDD' };
+    return { 
+      name: 'weather-partly-cloudy', 
+      lib: MaterialCommunityIcons, 
+      color: '#DDDDDD' 
+    };
   }
+};
+
+// Format temperature from Kelvin
+const formatTemp = (kelvin, unit = 'F') => {
+  if (unit === 'F') {
+    return Math.round(((kelvin - 273.15) * 9/5) + 32);
+  }
+  return Math.round(kelvin - 273.15);
+};
+
+// Format time
+const formatTime = (timestamp, timezoneOffset) => {
+  const date = new Date((timestamp + timezoneOffset) * 1000);
+  return date.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true 
+  }).replace(' ', '').toLowerCase();
 };
 
 const WeatherApp = () => {
-  // Mock data
-  const currentWeather = {
-    temp: 72,
-    condition: 'Sunny',
-    high: 78,
-    low: 65,
-    feelsLike: 74,
-    humidity: 45,
-    windSpeed: 8,
-    uvIndex: 6,
-    sunrise: '6:45 AM',
-    sunset: '7:30 PM',
-    location: 'San Francisco, CA',
-  };
+  const [weatherData, setWeatherData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [location, setLocation] = useState(null);
+  const [error, setError] = useState(null);
+  const [fadeAnim] = useState(new Animated.Value(0));
 
-  const hourlyForecast = [
-    { time: 'Now', temp: 72, condition: 'Sunny' },
-    { time: '1PM', temp: 74, condition: 'Sunny' },
-    { time: '2PM', temp: 76, condition: 'Partly Cloudy' },
-    { time: '3PM', temp: 77, condition: 'Partly Cloudy' },
-    { time: '4PM', temp: 76, condition: 'Cloudy' },
-    { time: '5PM', temp: 74, condition: 'Cloudy' },
-    { time: '6PM', temp: 71, condition: 'Light Rain' },
-    { time: '7PM', temp: 68, condition: 'Rain' },
-  ];
-
-  const weeklyForecast = [
-    { day: 'Today', high: 78, low: 65, condition: 'Sunny' },
-    { day: 'Tue', high: 80, low: 66, condition: 'Sunny' },
-    { day: 'Wed', high: 82, low: 68, condition: 'Partly Cloudy' },
-    { day: 'Thu', high: 79, low: 67, condition: 'Light Rain' },
-    { day: 'Fri', high: 75, low: 64, condition: 'Rain' },
-    { day: 'Sat', high: 73, low: 63, condition: 'Heavy Rain' },
-    { day: 'Sun', high: 76, low: 64, condition: 'Partly Cloudy' },
-  ];
-
-  // Animation values
-  const fadeAnim = new Animated.Value(0);
-
-  React.useEffect(() => {
+  // Animation
+  useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 1000,
@@ -89,25 +139,225 @@ const WeatherApp = () => {
     }).start();
   }, []);
 
-  const currentIcon = getWeatherIcon(currentWeather.condition);
+  // Fetch location
+  const getLocation = useCallback(async () => {
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setError('Permission to access location was denied');
+        return null;
+      }
+
+      let location = await Location.getCurrentPositionAsync({});
+      return {
+        lat: location.coords.latitude,
+        lon: location.coords.longitude
+      };
+    } catch (err) {
+      console.error('Location error:', err);
+      return null;
+    }
+  }, []);
+
+  // Fetch weather data
+  const fetchWeatherData = useCallback(async (coords = null) => {
+    try {
+      let lat, lon;
+      
+      if (!coords) {
+        // Check cache first
+        const cachedData = await AsyncStorage.getItem('weatherData');
+        if (cachedData) {
+          setWeatherData(JSON.parse(cachedData));
+        }
+
+        const userLocation = await getLocation();
+        if (!userLocation) {
+          // Fallback to default location (San Francisco)
+          lat = 37.7749;
+          lon = -122.4194;
+        } else {
+          lat = userLocation.lat;
+          lon = userLocation.lon;
+        }
+      } else {
+        lat = coords.lat;
+        lon = coords.lon;
+      }
+
+      // Fetch current weather
+      const currentResponse = await fetch(
+        `${BASE_URL}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}`
+      );
+      
+      if (!currentResponse.ok) throw new Error('Weather fetch failed');
+      
+      const currentData = await currentResponse.json();
+
+      // Fetch forecast
+      const forecastResponse = await fetch(
+        `${BASE_URL}/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}`
+      );
+      
+      if (!forecastResponse.ok) throw new Error('Forecast fetch failed');
+      
+      const forecastData = await forecastResponse.json();
+
+      // Process data
+      const processedData = {
+        current: {
+          temp: formatTemp(currentData.main.temp),
+          condition: currentData.weather[0].main,
+          description: currentData.weather[0].description,
+          high: formatTemp(currentData.main.temp_max),
+          low: formatTemp(currentData.main.temp_min),
+          feelsLike: formatTemp(currentData.main.feels_like),
+          humidity: currentData.main.humidity,
+          windSpeed: Math.round(currentData.wind.speed * 2.23694), // m/s to mph
+          pressure: currentData.main.pressure,
+          sunrise: formatTime(currentData.sys.sunrise, currentData.timezone),
+          sunset: formatTime(currentData.sys.sunset, currentData.timezone),
+          isDay: currentData.dt > currentData.sys.sunrise && currentData.dt < currentData.sys.sunset,
+          location: `${currentData.name}, ${currentData.sys.country}`,
+          timezone: currentData.timezone
+        },
+        hourly: forecastData.list.slice(0, 8).map(item => ({
+          time: formatTime(item.dt, currentData.timezone),
+          temp: formatTemp(item.main.temp),
+          condition: item.weather[0].main
+        })),
+        daily: processDailyForecast(forecastData.list, currentData.timezone)
+      };
+
+      // Cache the data
+      await AsyncStorage.setItem('weatherData', JSON.stringify(processedData));
+      await AsyncStorage.setItem('lastFetch', Date.now().toString());
+      
+      setWeatherData(processedData);
+      setError(null);
+      return processedData;
+      
+    } catch (err) {
+      console.error('Fetch error:', err);
+      setError('Failed to fetch weather data. Please try again.');
+      
+      // Try to use cached data if available
+      const cachedData = await AsyncStorage.getItem('weatherData');
+      if (cachedData) {
+        setWeatherData(JSON.parse(cachedData));
+      }
+      return null;
+    }
+  }, []);
+
+  // Process daily forecast
+  const processDailyForecast = (forecastList, timezone) => {
+    const days = {};
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    
+    forecastList.forEach(item => {
+      const date = new Date((item.dt + timezone) * 1000);
+      const dayKey = date.toISOString().split('T')[0];
+      const dayName = dayNames[date.getDay()];
+      
+      if (!days[dayKey]) {
+        days[dayKey] = {
+          day: dayName,
+          high: formatTemp(item.main.temp_max),
+          low: formatTemp(item.main.temp_min),
+          condition: item.weather[0].main,
+          date: date
+        };
+      } else {
+        if (formatTemp(item.main.temp_max) > days[dayKey].high) {
+          days[dayKey].high = formatTemp(item.main.temp_max);
+        }
+        if (formatTemp(item.main.temp_min) < days[dayKey].low) {
+          days[dayKey].low = formatTemp(item.main.temp_min);
+        }
+      }
+    });
+
+    return Object.values(days).slice(0, 7);
+  };
+
+  // Initial load
+  useEffect(() => {
+    const loadWeather = async () => {
+      setLoading(true);
+      await fetchWeatherData();
+      setLoading(false);
+    };
+    
+    loadWeather();
+  }, []);
+
+  // Refresh function
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchWeatherData();
+    setRefreshing(false);
+  }, []);
+
+  // Handle retry
+  const handleRetry = () => {
+    setLoading(true);
+    fetchWeatherData().finally(() => setLoading(false));
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2F80ED" />
+        <Text style={styles.loadingText}>Fetching weather data...</Text>
+      </View>
+    );
+  }
+
+  if (error && !weatherData) {
+    return (
+      <View style={styles.errorContainer}>
+        <MaterialCommunityIcons name="weather-cloudy-alert" size={64} color="#FF6B6B" />
+        <Text style={styles.errorText}>{error}</Text>
+        <Text style={styles.retryText} onPress={handleRetry}>
+          Tap to retry
+        </Text>
+      </View>
+    );
+  }
+
+  const current = weatherData?.current;
+  const isDay = current?.isDay ?? true;
+  const currentIcon = getWeatherIcon(current?.condition, isDay);
   const IconComponent = currentIcon.lib;
+  const gradientColors = getGradientColors(current?.condition, isDay);
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <LinearGradient
-        colors={getGradientColors(currentWeather.condition)}
+        colors={gradientColors}
         style={styles.background}
       >
-        <ScrollView style={styles.scrollView}>
+        <ScrollView 
+          style={styles.scrollView}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#FFFFFF"
+              colors={['#FFFFFF']}
+            />
+          }
+        >
           {/* Current Weather */}
           <View style={styles.currentWeatherContainer}>
             <View style={styles.locationContainer}>
               <FontAwesome name="map-marker" size={20} color="white" />
-              <Text style={styles.locationText}>{currentWeather.location}</Text>
+              <Text style={styles.locationText}>{current?.location || 'Loading...'}</Text>
             </View>
             
             <View style={styles.tempContainer}>
-              <Text style={styles.tempText}>{currentWeather.temp}°</Text>
+              <Text style={styles.tempText}>{current?.temp || '--'}°</Text>
               <IconComponent 
                 name={currentIcon.name} 
                 size={48} 
@@ -116,9 +366,9 @@ const WeatherApp = () => {
               />
             </View>
             
-            <Text style={styles.conditionText}>{currentWeather.condition}</Text>
+            <Text style={styles.conditionText}>{current?.description || ''}</Text>
             <Text style={styles.highLowText}>
-              H: {currentWeather.high}° L: {currentWeather.low}°
+              H: {current?.high || '--'}° L: {current?.low || '--'}°
             </Text>
           </View>
 
@@ -130,8 +380,8 @@ const WeatherApp = () => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.hourlyScroll}
             >
-              {hourlyForecast.map((hour, index) => {
-                const hourIcon = getWeatherIcon(hour.condition);
+              {weatherData?.hourly?.map((hour, index) => {
+                const hourIcon = getWeatherIcon(hour.condition, isDay);
                 const HourIconComponent = hourIcon.lib;
                 
                 return (
@@ -152,8 +402,8 @@ const WeatherApp = () => {
           {/* Weekly Forecast */}
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>7-DAY FORECAST</Text>
-            {weeklyForecast.map((day, index) => {
-              const dayIcon = getWeatherIcon(day.condition);
+            {weatherData?.daily?.map((day, index) => {
+              const dayIcon = getWeatherIcon(day.condition, isDay);
               const DayIconComponent = dayIcon.lib;
               
               return (
@@ -180,34 +430,42 @@ const WeatherApp = () => {
               <View style={styles.detailItem}>
                 <Feather name="sunrise" size={24} color="white" />
                 <Text style={styles.detailLabel}>Sunrise</Text>
-                <Text style={styles.detailValue}>{currentWeather.sunrise}</Text>
+                <Text style={styles.detailValue}>{current?.sunrise || '--'}</Text>
               </View>
               <View style={styles.detailItem}>
                 <Feather name="sunset" size={24} color="white" />
                 <Text style={styles.detailLabel}>Sunset</Text>
-                <Text style={styles.detailValue}>{currentWeather.sunset}</Text>
+                <Text style={styles.detailValue}>{current?.sunset || '--'}</Text>
               </View>
               <View style={styles.detailItem}>
                 <Feather name="wind" size={24} color="white" />
                 <Text style={styles.detailLabel}>Wind</Text>
-                <Text style={styles.detailValue}>{currentWeather.windSpeed} mph</Text>
+                <Text style={styles.detailValue}>{current?.windSpeed || '--'} mph</Text>
               </View>
               <View style={styles.detailItem}>
                 <Feather name="droplet" size={24} color="white" />
                 <Text style={styles.detailLabel}>Humidity</Text>
-                <Text style={styles.detailValue}>{currentWeather.humidity}%</Text>
+                <Text style={styles.detailValue}>{current?.humidity || '--'}%</Text>
               </View>
               <View style={styles.detailItem}>
                 <Feather name="thermometer" size={24} color="white" />
                 <Text style={styles.detailLabel}>Feels Like</Text>
-                <Text style={styles.detailValue}>{currentWeather.feelsLike}°</Text>
+                <Text style={styles.detailValue}>{current?.feelsLike || '--'}°</Text>
               </View>
               <View style={styles.detailItem}>
-                <MaterialCommunityIcons name="weather-sunny-alert" size={24} color="white" />
-                <Text style={styles.detailLabel}>UV Index</Text>
-                <Text style={styles.detailValue}>{currentWeather.uvIndex}</Text>
+                <MaterialCommunityIcons name="gauge" size={24} color="white" />
+                <Text style={styles.detailLabel}>Pressure</Text>
+                <Text style={styles.detailValue}>{current?.pressure || '--'} hPa</Text>
               </View>
             </View>
+          </View>
+
+          {/* Last Updated */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              {error && 'Using cached data. '}
+              Pull down to refresh
+            </Text>
           </View>
         </ScrollView>
       </LinearGradient>
@@ -225,6 +483,36 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1A2980',
+  },
+  loadingText: {
+    color: 'white',
+    marginTop: 20,
+    fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1A2980',
+    padding: 20,
+  },
+  errorText: {
+    color: 'white',
+    fontSize: 18,
+    textAlign: 'center',
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  retryText: {
+    color: '#4FC3F7',
+    fontSize: 16,
+    textDecorationLine: 'underline',
   },
   currentWeatherContainer: {
     alignItems: 'center',
@@ -347,6 +635,16 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: '300',
+  },
+  footer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+  },
+  footerText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    textAlign: 'center',
   },
 });
 

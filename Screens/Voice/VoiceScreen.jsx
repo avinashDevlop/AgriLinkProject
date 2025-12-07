@@ -164,7 +164,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   // IMPORTANT: Don't hardcode API keys in production. Use secure storage / env vars.
   // Replace the placeholder below with your method of supplying the API key.
-  const [apiKey] = useState('AIzaSyBiIqpSdEMxaBgEmaLwNUkJ1yaU3q77KRM');
+  const [apiKey] = useState('AIzaSyDlZGmg2dwBHIt5ZaEfb4FD30uaCPvWyB8');
 
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [spokenWords, setSpokenWords] = useState([]);
